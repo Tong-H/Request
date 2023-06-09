@@ -1,7 +1,5 @@
 'use strict';
 
-Object.defineProperty(exports, '__esModule', { value: true });
-
 /*! *****************************************************************************
 Copyright (c) Microsoft Corporation.
 
@@ -28,7 +26,17 @@ var __assign = function() {
     return __assign.apply(this, arguments);
 };
 
-exports.RequestInstance = void 0;
+function __spreadArray(to, from, pack) {
+    if (pack || arguments.length === 2) for (var i = 0, l = from.length, ar; i < l; i++) {
+        if (ar || !(i in from)) {
+            if (!ar) ar = Array.prototype.slice.call(from, 0, i);
+            ar[i] = from[i];
+        }
+    }
+    return to.concat(ar || Array.prototype.slice.call(from));
+}
+
+var RequestInstance;
 (function (RequestInstance) {
     (function (Methods) {
         Methods["post"] = "post";
@@ -43,27 +51,90 @@ exports.RequestInstance = void 0;
         ErrorMesg["onCancel"] = "On Cancel";
         ErrorMesg["networkError"] = "Network Error";
     })(RequestInstance.ErrorMesg || (RequestInstance.ErrorMesg = {}));
-})(exports.RequestInstance || (exports.RequestInstance = {}));
+})(RequestInstance || (RequestInstance = {}));
 var Request = /** @class */ (function () {
-    function Request(InitialConfig) {
+    function Request(CreateProps) {
         this.host = "";
-        this.timeout = 3000;
-        this.headers = {};
         this.existing = {};
         this.waiting = {};
-        InitialConfig.host && (this.host = InitialConfig.host);
-        InitialConfig.interceptBefore && (this.interceptBefore = InitialConfig.interceptBefore);
-        InitialConfig.interceptAfter && (this.interceptAfter = InitialConfig.interceptAfter);
-        InitialConfig.headers && (this.headers = JSON.stringify(InitialConfig.headers));
-        InitialConfig.timeout && (this.timeout = InitialConfig.timeout);
+        CreateProps.host && (this.host = CreateProps.host);
+        CreateProps.interceptAfter && (this.interceptAfter = CreateProps.interceptAfter);
+        CreateProps.headers && (this.headers = CreateProps.headers);
+        CreateProps.timeout && (this.timeout = CreateProps.timeout);
     }
+    Request.prototype.combine = function (method) {
+        var _this_1 = this;
+        var argu = [];
+        for (var _i = 1; _i < arguments.length; _i++) {
+            argu[_i - 1] = arguments[_i];
+        }
+        var _p = __assign(__assign({}, (typeof argu[0] === "string"
+            ? {
+                api: argu[0],
+                params: argu[1],
+                data: argu[2],
+            }
+            : argu[0])), { method: method });
+        var _h = __assign(__assign({}, (this.headers || {})), (_p.headers || {}));
+        var config = __assign(__assign({}, _p), { headers: _h, timeout: _p.timeout || this.timeout, host: _p.host || this.host, paramsForSend: this.toParams(_p.params), dataForSend: (function () {
+                if (_p.data === undefined)
+                    return undefined;
+                if (_p.formData || Object.entries(_p.data).find(function (item) { return _this_1.judge(item[1]) === "file"; }))
+                    return _this_1.toFormData(_p.data);
+                return _p.data;
+            })() });
+        if ("delayTime" in config) {
+            return new Promise(function (resolve, reject) {
+                var key = _this_1.reqKey(config);
+                _this_1.waiting[key] && window.clearTimeout(_this_1.waiting[key].time);
+                var _t = setTimeout(function () {
+                    delete _this_1.waiting[key];
+                    _this_1.send(config)
+                        .then(function (res) { return resolve(res); })
+                        .catch(function (err) { return reject(err); });
+                }, config.delayTime);
+                _this_1.waiting[key] = __assign(__assign({}, config), { time: _t });
+            });
+        }
+        return this.send(config);
+    };
+    Request.prototype.get = function () {
+        var props = [];
+        for (var _i = 0; _i < arguments.length; _i++) {
+            props[_i] = arguments[_i];
+        }
+        return this.combine.apply(this, __spreadArray([RequestInstance.Methods.get], props, false));
+    };
+    Request.prototype.post = function () {
+        var props = [];
+        for (var _i = 0; _i < arguments.length; _i++) {
+            props[_i] = arguments[_i];
+        }
+        return this.combine.apply(this, __spreadArray([RequestInstance.Methods.post], props, false));
+    };
+    Request.prototype.put = function () {
+        var props = [];
+        for (var _i = 0; _i < arguments.length; _i++) {
+            props[_i] = arguments[_i];
+        }
+        return this.combine.apply(this, __spreadArray([RequestInstance.Methods.put], props, false));
+    };
+    Request.prototype.delete = function () {
+        var props = [];
+        for (var _i = 0; _i < arguments.length; _i++) {
+            props[_i] = arguments[_i];
+        }
+        return this.combine.apply(this, __spreadArray([RequestInstance.Methods.delete], props, false));
+    };
     Request.prototype.judge = function (data) {
         var a = Object.prototype.toString.call(data).match(/\[object ([A-Za-z]*)\]/);
         return a ? a[1].toLowerCase() : "";
     };
+    Request.prototype.reqKey = function (config) {
+        return config.method + config.api + config.paramsForSend;
+    };
     Request.prototype.toExist = function (_a) {
-        var api = _a.api, method = _a.method, instance = _a.instance;
-        var key = api + method;
+        var key = _a.key, instance = _a.instance;
         if (this.existing[key]) {
             this.existing[key] && this.existing[key].abort();
             delete this.existing[key];
@@ -73,84 +144,39 @@ var Request = /** @class */ (function () {
     Request.prototype.toFormData = function (data) {
         var _tMain = this.judge(data), _formdata = new FormData();
         if (_tMain === "object") {
-            for (var key in data) {
-                _formdata.append(key, data[key]);
-            }
+            Object.entries(data).forEach(function (item) { return _formdata.append(item[0], item[1]); });
         }
         return _formdata;
     };
-    Request.prototype.debounce = function (config) {
-        var _this_1 = this;
-        return new Promise(function (resolve, reject) {
-            var key = config.method + config.api;
-            _this_1.waiting[key] && window.clearTimeout(_this_1.waiting[key].time);
-            var _t = setTimeout(function () {
-                delete _this_1.waiting[key];
-                _this_1.send(config)
-                    .then(function (res) { return resolve(res); })
-                    .catch(function (err) { return reject(err); });
-            }, config.delayTime);
-            _this_1.waiting[key] = __assign(__assign({}, config), { time: _t });
-        });
-    };
-    Request.prototype.transferData = function (data, isFirst) {
+    Request.prototype.toString = function (data) {
         var _r = "";
-        var _tMain = typeof data, _tMinor = this.judge(data);
+        var _tMain = typeof data; this.judge(data);
         switch (_tMain) {
             case "object":
-                if (_tMinor === "null") {
-                    _r = "";
-                    break;
+                try {
+                    _r = JSON.stringify(data);
                 }
-                if (_tMinor === "formdata" && isFirst) {
-                    _r = data;
-                    break;
+                catch (error) {
+                    _r = "[object object]";
                 }
-                if (_tMinor === "object") {
-                    if (isFirst)
-                        for (var key in data) {
-                            var _v = this.transferData(data[key], false);
-                            _r += (_r ? "&" : "") + key + (_v ? "=" + _v : "");
-                        }
-                    else
-                        _r = JSON.stringify(data);
-                    break;
-                }
-                if ("toString" in data.__proto__) {
-                    _r = data.toString();
-                    break;
-                }
-                _r = data;
                 break;
             case "symbol":
             case "function":
                 _r = data.toString();
                 break;
-            case "undefined":
-                _r = "";
-                break;
             default:
                 _r = data;
                 break;
         }
-        return _r + "";
+        return _r;
     };
-    Request.prototype.combineConfig = function () {
-        var argu = [];
-        for (var _i = 0; _i < arguments.length; _i++) {
-            argu[_i] = arguments[_i];
+    Request.prototype.toParams = function (data) {
+        var _r = "";
+        for (var key in data) {
+            var _v = this.toString(data[key]);
+            _r += (_r ? "&" : "") + key + (_v ? "=" + _v : "");
         }
-        var config = typeof argu[0] === "string"
-            ? {
-                api: argu[0],
-                data: argu[1],
-            }
-            : argu[0];
-        this.headers &&
-            (config.headers = __assign(__assign({}, this.headers), (config.headers || {})));
-        config.timeout = config.timeout || this.timeout;
-        config.host = config.host || this.host;
-        return config;
+        return _r;
     };
     Request.prototype.resolve = function (resolve, request) {
         var _this_1 = this;
@@ -166,136 +192,91 @@ var Request = /** @class */ (function () {
             return _res;
         })();
         resolve((function () {
-            var _a;
-            var res;
-            try {
-                var isJson = (_a = responseHeaders["content-type"]) === null || _a === void 0 ? void 0 : _a.indexOf("json");
-                res = isJson ? JSON.parse(request.response) : request.response;
-            }
-            catch (error) {
-                res = request.response;
-            }
-            _this_1.interceptAfter && _this_1.interceptAfter(res);
-            return res;
+            var result = (function () {
+                var _a;
+                try {
+                    var isJson = (_a = responseHeaders["content-type"]) === null || _a === void 0 ? void 0 : _a.indexOf("json");
+                    return isJson ? JSON.parse(request.response) : request;
+                }
+                catch (error) {
+                    return request;
+                }
+            })();
+            var _return = _this_1.interceptAfter && _this_1.interceptAfter({ result: result, type: "success" });
+            return _return !== undefined ? _return : result;
         })());
         request = null;
     };
     Request.prototype.reject = function (reject, request, message, config) {
         if (request === null)
             return;
-        if (message === exports.RequestInstance.ErrorMesg.onCancel || message === exports.RequestInstance.ErrorMesg.onAbort)
+        if (message === RequestInstance.ErrorMesg.onCancel || message === RequestInstance.ErrorMesg.onAbort)
             return;
-        var error = { status: request.status, timeout: request.timeout, statusText: request.statusText, message: message };
+        var error = {
+            status: request.status,
+            timeout: request.timeout,
+            statusText: request.statusText,
+            message: message,
+            response: (function () {
+                try {
+                    return JSON.parse(request.response);
+                }
+                catch (error) {
+                    return { body: request.response };
+                }
+            })(),
+        };
         request = null;
         if (config.tryTimes) {
             config.tryTimes -= 1;
             this.send(config);
             return;
         }
-        reject(error);
-    };
-    Request.prototype.get = function () {
-        var argu = [];
-        for (var _i = 0; _i < arguments.length; _i++) {
-            argu[_i] = arguments[_i];
-        }
-        var config = __assign(__assign({}, this.combineConfig(typeof argu[0] === "string"
-            ? {
-                api: argu[0],
-                params: argu[1],
-            }
-            : argu[0])), { method: exports.RequestInstance.Methods.get });
-        return this.beforeSend(config);
-    };
-    Request.prototype.delete = function () {
-        var argu = [];
-        for (var _i = 0; _i < arguments.length; _i++) {
-            argu[_i] = arguments[_i];
-        }
-        var config = __assign(__assign({}, this.combineConfig(typeof argu[0] === "string"
-            ? {
-                api: argu[0],
-                params: argu[1],
-            }
-            : argu[0])), { method: exports.RequestInstance.Methods.delete });
-        return this.beforeSend(config);
-    };
-    Request.prototype.post = function () {
-        var argu = [];
-        for (var _i = 0; _i < arguments.length; _i++) {
-            argu[_i] = arguments[_i];
-        }
-        var config = __assign(__assign({}, this.combineConfig(typeof argu[0] === "string"
-            ? {
-                api: argu[0],
-                data: argu[1],
-            }
-            : argu[0])), { method: exports.RequestInstance.Methods.post });
-        return this.beforeSend(config);
-    };
-    Request.prototype.put = function () {
-        var argu = [];
-        for (var _i = 0; _i < arguments.length; _i++) {
-            argu[_i] = arguments[_i];
-        }
-        var config = __assign(__assign({}, this.combineConfig(typeof argu[0] === "string"
-            ? {
-                api: argu[0],
-                data: argu[1],
-            }
-            : argu[0])), { method: exports.RequestInstance.Methods.put });
-        return this.beforeSend(config);
-    };
-    Request.prototype.beforeSend = function (config) {
-        config.paramsForSend = this.transferData(config.params, true);
-        if (config.data)
-            config.dataForSend = config.formdata ? this.toFormData(config.data) : this.transferData(config.data, true);
-        return config.delayTime ? this.debounce(config) : this.send(config);
+        var _return = this.interceptAfter && this.interceptAfter({ result: error, type: "error" });
+        reject(_return !== undefined ? _return : error);
     };
     Request.prototype.send = function (config) {
         var _this_1 = this;
         return new Promise(function (resolve, reject) {
-            var request = new XMLHttpRequest(), _url = config.host + config.api + (config.paramsForSend ? "?" + config.paramsForSend : ""), _this = _this_1;
+            var api = /http|https/.test(config.api) ? config.api : config.host + config.api;
+            var request = new XMLHttpRequest(), _url = api + (config.paramsForSend ? "?" + config.paramsForSend : ""), _this = _this_1;
             request.open(config.method, _url, true);
-            config.cancelable && _this_1.toExist({ api: config.api, method: config.method, instance: request });
+            config.cancelable && _this_1.toExist({ key: _this_1.reqKey(config), instance: request });
+            config.responseType !== undefined && (request.responseType = config.responseType);
             request.onreadystatechange = function () {
                 if (request.readyState === XMLHttpRequest.DONE) {
                     if (request.status === 200) {
                         _this.resolve(resolve, request);
                     }
                     else if (request.status === 0) {
-                        _this.reject(reject, request, exports.RequestInstance.ErrorMesg.onCancel, config);
+                        _this.reject(reject, request, RequestInstance.ErrorMesg.onCancel, config);
                     }
                     else
-                        _this.reject(reject, request, exports.RequestInstance.ErrorMesg.codeError, config);
+                        _this.reject(reject, request, RequestInstance.ErrorMesg.codeError, config);
                 }
             };
-            // request.onloadend = () => {
-            // console.log(2);
-            // }
             request.ontimeout = function () {
-                _this.reject(reject, request, exports.RequestInstance.ErrorMesg.onTimeout, config);
+                _this.reject(reject, request, RequestInstance.ErrorMesg.onTimeout, config);
             };
             request.onabort = function () {
-                _this.reject(reject, request, exports.RequestInstance.ErrorMesg.onAbort, config);
+                _this.reject(reject, request, RequestInstance.ErrorMesg.onAbort, config);
             };
             request.onerror = function () {
-                _this.reject(reject, request, exports.RequestInstance.ErrorMesg.networkError, config);
+                _this.reject(reject, request, RequestInstance.ErrorMesg.networkError, config);
             };
+            var _DataT = _this_1.judge(config.dataForSend);
+            if (_DataT === "object")
+                request.setRequestHeader("Content-Type", "application/json");
             if (config.headers)
                 for (var key in config.headers) {
-                    var _type = _this_1.judge(config.dataForSend), _auto = ["formData", "undefined"];
-                    if (_auto.indexOf(_type))
-                        break;
                     request.setRequestHeader(key, config.headers[key]);
                 }
             config.timeout && (request.timeout = config.timeout);
-            request.send(JSON.stringify(config.dataForSend));
+            request.send(_DataT === "formdata" ? config.dataForSend : JSON.stringify(config.dataForSend));
         });
     };
     return Request;
 }());
-var request = new Request({});
 
-exports.Request = Request;
-exports.request = request;
+module.exports = Request;
+//# sourceMappingURL=bundle.js.map
